@@ -22,4 +22,7 @@ And, write the following in your code.
                     (sel ds :cols :count)))
 ```
 
+![c1](http://farm4.staticflickr.com/3718/12808693503_be8d1640eb.jpg)
+![c2](http://farm3.staticflickr.com/2849/12808602045_867caf4cff.jpg)
+![c3](http://farm8.staticflickr.com/7322/12808602005_a001cb7f47.jpg)
 

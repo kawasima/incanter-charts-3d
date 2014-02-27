@@ -95,20 +95,19 @@
                                                    [:title title#]))))]
        (apply pie-chart-3d* args#))))
 
+
 (defn- save-gif [chart filename & options]
   (with-open [os (FileImageOutputStream. (io/file filename))]
-    (let [v (view chart)
+    (let [width (or (:width options) 500)
+          height (or (:height options) 400)
           gif-writer (get-writer)
-          slider (last (.. v getContentPane getComponents))
-          panel (. v getChartPanel)
           image-write-param (.getDefaultWriteParam gif-writer)
           type-specifier (ImageTypeSpecifier/createFromBufferedImageType BufferedImage/TYPE_INT_RGB)
           image-meta (.getDefaultImageMetadata gif-writer type-specifier image-write-param)
           meta-format-name (.getNativeMetadataFormatName image-meta)
           root (.getAsTree image-meta meta-format-name)
           child (IIOMetadataNode. "ApplicationExtension")
-          max-idx (count (range 0.0 0.9 0.025))]
-      (.setVisible v false)
+          depth-factors (vec (range 0.0 0.9 0.025))]
       (doto (get-node root "GraphicControlExtension")
         (.setAttribute "disposalMethod" "none")
         (.setAttribute "userInputFlag" "FALSE")
@@ -126,16 +125,13 @@
       (doto gif-writer
         (.setOutput os)
         (.prepareWriteSequence nil))
-      (doseq [x (into (vec (range max-idx)) (vec (reverse (range max-idx))))]
-        (. slider setValue x)
+      (doseq [df (into depth-factors (reverse depth-factors))]
+        (.. chart getPlot (setDepthFactor df))
         (.writeToSequence gif-writer
                           (IIOImage.
-                           (.createBufferedImage chart
-                                                 (.getWidth panel)
-                                                 (.getHeight panel)) nil image-meta)
+                           (.createBufferedImage chart width (- height (* df 300))) nil image-meta)
                           image-write-param))
-      (.endWriteSequence gif-writer)
-      (.dispose v))))
+      (.endWriteSequence gif-writer))))
 
 (when-let [original-view-fn (get-method view org.jfree.chart.JFreeChart)]
   (defmethod view org.jfree.chart.JFreeChart [chart & options]

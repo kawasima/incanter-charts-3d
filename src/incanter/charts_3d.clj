@@ -1,8 +1,13 @@
 (ns incanter.charts-3d
+  (:require [clojure.java.io :as io])
   (:use [incanter core charts])
   (:import [org.jfree.chart ChartFactory]
            [org.jfree.chart.plot PiePlot3D]
-           [org.jfree.data.general PieDataset DefaultPieDataset]))
+           [org.jfree.data.general PieDataset DefaultPieDataset]
+           [javax.imageio ImageIO ImageTypeSpecifier IIOImage]
+           [javax.imageio.metadata IIOMetadataNode]
+           [javax.imageio.stream FileImageOutputStream]
+           [java.awt.image BufferedImage]))
 
 (defn- data-as-list
   "
@@ -46,6 +51,18 @@
     (.revalidate v)
     slider))
 
+(defn- get-writer []
+  (let [writers (iterator-seq (ImageIO/getImageWritersBySuffix "gif"))]
+    (first writers)))
+
+(defn- get-node [root-node node-name]
+  (let [nodes-cnt (.getLength root-node)]
+    (if-let [item-idx (seq (filter #(= (.compareToIgnoreCase (.. root-node (item %) getNodeName) node-name) 0) (range nodes-cnt)))]
+      (.item root-node (first item-idx))
+      (let [node (IIOMetadataNode. node-name)]
+        (.appendChild root-node node)
+        node))))
+
 (defn pie-chart-3d*
   ([categories values & options]
     (let [opts (when options (apply assoc {} options))
@@ -78,6 +95,48 @@
                                                    [:title title#]))))]
        (apply pie-chart-3d* args#))))
 
+(defn- save-gif [chart filename & options]
+  (with-open [os (FileImageOutputStream. (io/file filename))]
+    (let [v (view chart)
+          gif-writer (get-writer)
+          slider (last (.. v getContentPane getComponents))
+          panel (. v getChartPanel)
+          image-write-param (.getDefaultWriteParam gif-writer)
+          type-specifier (ImageTypeSpecifier/createFromBufferedImageType BufferedImage/TYPE_INT_RGB)
+          image-meta (.getDefaultImageMetadata gif-writer type-specifier image-write-param)
+          meta-format-name (.getNativeMetadataFormatName image-meta)
+          root (.getAsTree image-meta meta-format-name)
+          child (IIOMetadataNode. "ApplicationExtension")
+          max-idx (count (range 0.0 0.9 0.025))]
+      (.setVisible v false)
+      (doto (get-node root "GraphicControlExtension")
+        (.setAttribute "disposalMethod" "none")
+        (.setAttribute "userInputFlag" "FALSE")
+        (.setAttribute "transparentColorFlag" "FALSE")
+        (.setAttribute "delayTime" "1")
+        (.setAttribute "transparentColorIndex" "0"))
+      (doto child
+        (.setAttribute "applicationID" "NETSCAPE")
+        (.setAttribute "authenticationCode" "2.0")
+        (.setUserObject (into-array Byte/TYPE [0x1 0x0 0x0])))
+      (.appendChild (get-node root "ApplicationExtensions") child)
+
+      (.setFromTree image-meta meta-format-name root)
+
+      (doto gif-writer
+        (.setOutput os)
+        (.prepareWriteSequence nil))
+      (doseq [x (into (vec (range max-idx)) (vec (reverse (range max-idx))))]
+        (. slider setValue x)
+        (.writeToSequence gif-writer
+                          (IIOImage.
+                           (.createBufferedImage chart
+                                                 (.getWidth panel)
+                                                 (.getHeight panel)) nil image-meta)
+                          image-write-param))
+      (.endWriteSequence gif-writer)
+      (.dispose v))))
+
 (when-let [original-view-fn (get-method view org.jfree.chart.JFreeChart)]
   (defmethod view org.jfree.chart.JFreeChart [chart & options]
     (let [view (apply original-view-fn chart options)]
@@ -85,4 +144,10 @@
         (pie-slider view))
       view)))
 
+(when-let [original-save-fn (get-method save org.jfree.chart.JFreeChart)]
+  (defmethod save org.jfree.chart.JFreeChart [chart filename & options]
+    (if (and (= (type (.getPlot chart)) org.jfree.chart.plot.PiePlot3D)
+             (.endsWith filename ".gif"))
+      (apply save-gif chart filename options)
+      (apply original-save-fn chart filename options))))
 

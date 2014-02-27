@@ -17,10 +17,12 @@
                   ["第一" 26]]))
 
 (def chart (pie-chart-3d (sel ds :cols :教科書)
-             (sel ds :cols :選定校数)
-             :theme :legacy))
+             (sel ds :cols :選定校数)))
 
-(deftest pie-chart-3d-test
+(deftest save-pie-chart-3d
+  (save chart "target/kyokasho.gif"))
+
+(deftest view-pie-chart-3d
   (let [pc3d (view chart)]
     (Thread/sleep 10000)
     (.dispose pc3d)))
@@ -31,5 +33,3 @@
                    (sel ds :cols :選定校数)))]
     (Thread/sleep 10000)
     (.dispose pc)))
-
-
